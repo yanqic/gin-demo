@@ -1,0 +1,20 @@
+setting:
+  application:
+    env: venus
+    host: 0.0.0.0
+    logpath: temp/logs/log.txt
+    name: gin-demo
+    port: 8080
+    readtimeout: 1
+    writertimeout: 2
+  jwt:
+    secret: gin-demo
+    timeout: 3600
+  database:
+    database: go_web
+
+    dbtype: mysql
+    host: server.yanqi.com
+    password: 123456
+    port: 3306
+    username: root
