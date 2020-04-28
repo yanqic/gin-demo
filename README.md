@@ -15,7 +15,7 @@ a restful api demo base on gin,mongodb,redis
 
 ## TODO List
 
-- [] 单元测试
-- [] redis 集成
-- [] mongodb 版本
-- [] 跨域支持
+- [ ] 单元测试
+- [ ] redis 集成
+- [ ] mongodb 版本
+- [ ] 跨域支持
