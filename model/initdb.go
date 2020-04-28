@@ -1,48 +1,110 @@
-package models
+package model
 
 import (
-  "fmt"
-  "gin-demo/config"
-  "gin-demo/lib/database"
-  "io/ioutil"
-  "strings"
+	"fmt"
+	"log"
+
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/mysql"
+
+	"gin-demo/config"
+	"time"
 )
 
-func InitDb() error {
-  filePath := "config/db.sql"
-  if config.DatabaseConfig.Dbtype == "sqlite3" {
-    fmt.Println("sqlite3数据库无需初始化！")
-    return nil
-  }
-  sql, err := Ioutil(filePath)
-  if err != nil {
-    fmt.Println("数据库基础数据初始化脚本读取失败！原因:", err.Error())
-    return err
-  }
-  sqlList := strings.Split(sql, ";")
-  for i := 0; i < len(sqlList); i++ {
-    if strings.Contains(sqlList[i], "--") {
-      fmt.Println(sqlList[i])
-      continue
-    }
-    sql := strings.Replace(sqlList[i]+";", "\n", "", 0)
-    if err = database.Eloquent.Exec(sql).Error; err != nil {
-      if !strings.Contains(err.Error(), "Query was empty") {
-        return err
-      }
-    }
-  }
-  return nil
+var db *gorm.DB
+
+type Model struct {
+	ID         int    `gorm:"primary_key" json:"id"`
+	CreatedOn  string `json:"created_on"`
+	ModifiedOn string `json:"modified_on"`
+	DeletedOn  int    `json:"deleted_on"`
 }
 
-func Ioutil(name string) (string, error) {
-  if contents, err := ioutil.ReadFile(name); err == nil {
-    //因为contents是[]byte类型，直接转换成string类型后会多一行空格,需要使用strings.Replace替换换行符
-    result := strings.Replace(string(contents), "\n", "", 1)
-    fmt.Println("Use ioutil.ReadFile to read a file:", result)
-    return result, nil
-  } else {
-    return "", err
-  }
+func init() {
+	var err error
+	db, err = gorm.Open(config.DatabaseConfig.Dbtype, fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8&parseTime=True&loc=Local",
+		config.DatabaseConfig.UserName,
+		config.DatabaseConfig.Password,
+		config.DatabaseConfig.Host,
+		config.DatabaseConfig.DbName))
+	if err != nil {
+		log.Fatalf("model.Setup err: %v", err)
+	}
+
+	gorm.DefaultTableNameHandler = func(db *gorm.DB, defaultTableName string) string {
+		return config.DatabaseConfig.TablePrefix + defaultTableName
+	}
+
+	db.SingularTable(true)
+	db.Callback().Create().Replace("gorm:update_time_stamp", updateTimeStampForCreateCallback)
+	db.Callback().Update().Replace("gorm:update_time_stamp", updateTimeStampForUpdateCallback)
+	db.Callback().Delete().Replace("gorm:delete", deleteCallback)
+	db.DB().SetMaxIdleConns(10)
+	db.DB().SetMaxOpenConns(100)
+
 }
 
+func CloseDB() {
+	defer db.Close()
+}
+
+// updateTimeStampForCreateCallback will set `CreatedOn`, `ModifiedOn` when creating
+func updateTimeStampForCreateCallback(scope *gorm.Scope) {
+	if !scope.HasError() {
+		nowTime := time.Now().Format("2006-01-02 15:04:05")
+		if createTimeField, ok := scope.FieldByName("CreatedOn"); ok {
+			if createTimeField.IsBlank {
+				_ = createTimeField.Set(nowTime)
+			}
+		}
+
+		if modifyTimeField, ok := scope.FieldByName("ModifiedOn"); ok {
+			if modifyTimeField.IsBlank {
+				_ = modifyTimeField.Set(nowTime)
+			}
+		}
+	}
+}
+
+// updateTimeStampForUpdateCallback will set `ModifiedOn` when updating
+func updateTimeStampForUpdateCallback(scope *gorm.Scope) {
+	if _, ok := scope.Get("gorm:update_column"); !ok {
+		_ = scope.SetColumn("ModifiedOn", time.Now().Format("2006-01-02 15:04:05"))
+	}
+}
+
+func deleteCallback(scope *gorm.Scope) {
+	if !scope.HasError() {
+		var extraOption string
+		if str, ok := scope.Get("gorm:delete_option"); ok {
+			extraOption = fmt.Sprint(str)
+		}
+
+		deletedOnField, hasDeletedOnField := scope.FieldByName("DeletedOn")
+
+		if !scope.Search.Unscoped && hasDeletedOnField {
+			scope.Raw(fmt.Sprintf(
+				"UPDATE %v SET %v=%v%v%v",
+				scope.QuotedTableName(),
+				scope.Quote(deletedOnField.DBName),
+				scope.AddToVars(time.Now().Unix()),
+				addExtraSpaceIfExist(scope.CombinedConditionSql()),
+				addExtraSpaceIfExist(extraOption),
+			)).Exec()
+		} else {
+			scope.Raw(fmt.Sprintf(
+				"DELETE FROM %v%v%v",
+				scope.QuotedTableName(),
+				addExtraSpaceIfExist(scope.CombinedConditionSql()),
+				addExtraSpaceIfExist(extraOption),
+			)).Exec()
+		}
+	}
+}
+
+func addExtraSpaceIfExist(str string) string {
+	if str != "" {
+		return " " + str
+	}
+	return ""
+}

@@ -1,11 +1,12 @@
 package router
 
 import (
-	"gin-demo/handler/sd"
-	"gin-demo/handler/user"
+	"gin-demo/controller/user"
+	"gin-demo/middleware/jwt"
 	"github.com/gin-gonic/gin"
 	"log"
 )
+
 // InitRouter 初始化路由
 func InitRouter() *gin.Engine {
 	r := gin.New()
@@ -17,23 +18,14 @@ func InitRouter() *gin.Engine {
 		})
 	})
 
-	// 监控信息
-	svcd := r.Group("/sd")
-	{
-		svcd.GET("/health", sd.HealthCheck)
-		// svcd.GET("/disk", sd.DiskCheck)
-		// svcd.GET("/cpu", sd.CPUCheck)
-		// svcd.GET("/ram", sd.RAMCheck)
-		// svcd.GET("/os", sd.OSCheck)
-	}
-
-	//r.POST("/login", user.Login)
+	r.POST("/login", user.Login)
 	v1 := r.Group("/api/v1")
-	// v1.Use(auth.JWTAuth())
+	v1.Use(jwt.Auth())
 	{
 		// 获取标签列表
-		v1.GET("/user", user.GetUser)
-		//v1.POST("user", user.AddUser)
+		v1.GET("/user", user.GetUsers)
+		v1.POST("/user", user.AddUser)
+		v1.PUT("/user/:id", user.EditUser)
 	}
 	log.Println("路由加载成功！")
 	return r
