@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"gin-demo/config"
 	"gin-demo/pkg/util"
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"strings"
